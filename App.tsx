@@ -130,7 +130,7 @@ export default function App() {
   }
 
   function onPressPlayPauseButton() {
-    return isPlaying ? onPressStop : onPressPlay;
+    return isPlaying ? onPressStop() : onPressPlay();
   }
 
   return (
