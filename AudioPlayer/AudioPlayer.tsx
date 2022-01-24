@@ -5,7 +5,7 @@ import React, {
   useState,
 } from "react";
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
-import Slider from "@react-native-community/slider";
+import Slider, { SliderProps } from "@react-native-community/slider";
 import { Audio, AVPlaybackNativeSource } from "expo-av";
 
 import PlayPauseButton from "./PlayPauseButton";
@@ -64,9 +64,26 @@ function millisecondsToMinutesAndSeconds(millis: number) {
   const zeroBeforeSeconds = seconds < 10 ? "0" : "";
   return minutes + ":" + zeroBeforeSeconds + seconds;
 }
+function formatRemainTimeText(remainTime: number) {
+  return millisecondsToMinutesAndSeconds(remainTime);
+}
 function defaultEmptyFunction() {
   return null;
 }
+
+type SliderWithOmittedProps = Omit<
+  SliderProps,
+  | "style"
+  | "minimumValue"
+  | "maximumValue"
+  | "value"
+  | "minimumTrackTintColor"
+  | "maximumTrackTintColor"
+  | "thumbTintColor"
+  | "onSlidingComplete"
+  | "onSlidingStart"
+  | "ref"
+>;
 
 export type AudioPlayerProps = {
   onFinished?: () => void;
@@ -80,7 +97,15 @@ export type AudioPlayerProps = {
   minimumTrackTintColor?: string;
   maximumTrackTintColor?: string;
   thumbTintColor?: string;
-};
+  playPauseButton?: ({
+    isPlaying,
+    onPressTogglePlayPauseButton,
+  }: {
+    isPlaying: boolean;
+    onPressTogglePlayPauseButton: () => void;
+  }) => JSX.Element;
+  remainTimeComponent?: ({ remainTime }: { remainTime: string }) => JSX.Element;
+} & SliderWithOmittedProps;
 
 export default function AudioPlayer({
   source,
@@ -94,6 +119,9 @@ export default function AudioPlayer({
   minimumTrackTintColor = "#61dafb",
   maximumTrackTintColor = "#9cdafd",
   thumbTintColor = "#61dafb",
+  playPauseButton,
+  remainTimeComponent,
+  ...props
 }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [sound, setSound] = useState<Sound>();
@@ -136,7 +164,7 @@ export default function AudioPlayer({
   function onPressStop() {
     stopSound();
   }
-  function onPressPlayPauseButton() {
+  function onPressTogglePlayPauseButton() {
     return isPlaying ? onPressStop() : onPressPlay();
   }
   function onSlidingComplete(value: number) {
@@ -151,9 +179,9 @@ export default function AudioPlayer({
 
   const isSoundFinished =
     soundStatus?.positionMillis === soundStatus?.durationMillis;
-  const remainTimeInMinutosWithSeconds =
+  const remainTime =
     soundStatus?.durationMillis &&
-    millisecondsToMinutesAndSeconds(
+    formatRemainTimeText(
       soundStatus?.durationMillis - soundStatus?.positionMillis
     );
 
@@ -177,10 +205,31 @@ export default function AudioPlayer({
     }
   }, [isSoundFinished]);
 
+  function renderPlayPauseButton() {
+    return playPauseButton ? (
+      playPauseButton({ isPlaying, onPressTogglePlayPauseButton })
+    ) : (
+      <PlayPauseButton
+        onPress={onPressTogglePlayPauseButton}
+        isPlaying={isPlaying}
+      />
+    );
+  }
+  function renderRemainTimeComponent() {
+    if (remainTime) {
+      return remainTimeComponent ? (
+        remainTimeComponent({ remainTime })
+      ) : (
+        <Text>{remainTime}</Text>
+      );
+    }
+  }
+
   return (
     <View style={styles.trackContainer}>
-      <PlayPauseButton onPress={onPressPlayPauseButton} isPlaying={isPlaying} />
+      {renderPlayPauseButton()}
       <Slider
+        {...props}
         style={trackLineStyle}
         minimumValue={0}
         maximumValue={soundStatus.durationMillis}
@@ -191,10 +240,7 @@ export default function AudioPlayer({
         onSlidingComplete={onSlidingComplete}
         onSlidingStart={onSlidingStart}
       />
-      <Text>
-        {" "}
-        {remainTimeInMinutosWithSeconds && remainTimeInMinutosWithSeconds}
-      </Text>
+      {renderRemainTimeComponent()}
     </View>
   );
 }
