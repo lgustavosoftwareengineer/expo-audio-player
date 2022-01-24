@@ -1,5 +1,10 @@
-import React, { useEffect, useState } from "react";
-import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from "react";
+import { StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Audio, AVPlaybackNativeSource } from "expo-av";
 
@@ -53,6 +58,12 @@ const DEFAULT_TRACK_LINE_STYLE: ViewStyle = {
   width: DEFAULT_TRACK_LINE_WIDTH,
 };
 
+function millisecondsToMinutesAndSeconds(millis: number) {
+  const minutes = Math.floor(millis / 60000);
+  const seconds = Math.round((millis % 60000) / 1000);
+  const zeroBeforeSeconds = seconds < 10 ? "0" : "";
+  return minutes + ":" + zeroBeforeSeconds + seconds;
+}
 function defaultEmptyFunction() {
   return null;
 }
@@ -61,7 +72,9 @@ export type AudioPlayerProps = {
   onFinished?: () => void;
   onReset?: () => void;
   onStart?: () => void;
-  onTrackValueChange?: (value: number) => void;
+  onStop?: () => void;
+  onSlidingChangeComplete?: (value: number) => void;
+  onSlidingChangeStart?: (value: number) => void;
   source: AVPlaybackNativeSource;
   trackLineStyle?: StyleProp<ViewStyle>;
   minimumTrackTintColor?: string;
@@ -74,7 +87,9 @@ export default function AudioPlayer({
   onFinished = defaultEmptyFunction,
   onReset = defaultEmptyFunction,
   onStart = defaultEmptyFunction,
-  onTrackValueChange,
+  onStop = defaultEmptyFunction,
+  onSlidingChangeComplete,
+  onSlidingChangeStart,
   trackLineStyle = DEFAULT_TRACK_LINE_STYLE,
   minimumTrackTintColor = "#61dafb",
   maximumTrackTintColor = "#9cdafd",
@@ -89,39 +104,58 @@ export default function AudioPlayer({
     throw new Error("To use AudioPlayer component need the source property");
   }
 
-  async function loadAndPlaySound() {
+  const loadSound = useCallback(async () => {
     const { sound } = await Audio.Sound.createAsync(source);
     setSound(sound);
-    await sound.playAsync();
-  }
+  }, [source]);
+
+  useLayoutEffect(() => {
+    loadSound();
+  }, [loadSound]);
+
   function resetSound() {
     onReset();
     setIsPlaying(false);
     sound?.setPositionAsync(0);
     sound?.stopAsync();
   }
-  function onPressPlay() {
+  function stopSound() {
+    onStop();
+    setIsPlaying(false);
+    sound?.pauseAsync();
+  }
+  function startSound() {
     onStart();
-    if (!sound) {
-      loadAndPlaySound();
-    }
     setIsPlaying(true);
     sound?.playAsync();
   }
+
+  function onPressPlay() {
+    startSound();
+  }
   function onPressStop() {
-    setIsPlaying(false);
-    sound?.pauseAsync();
+    stopSound();
   }
   function onPressPlayPauseButton() {
     return isPlaying ? onPressStop() : onPressPlay();
   }
-  function onTrackIndicatorChange(value: number) {
-    onTrackValueChange && onTrackValueChange(value);
+  function onSlidingComplete(value: number) {
+    onSlidingChangeComplete && onSlidingChangeComplete(value);
     sound?.setPositionAsync(value);
+    onPressPlay();
+  }
+  function onSlidingStart(value: number) {
+    onSlidingChangeStart && onSlidingChangeStart(value);
+    stopSound();
   }
 
   const isSoundFinished =
     soundStatus?.positionMillis === soundStatus?.durationMillis;
+  const remainTimeInMinutosWithSeconds =
+    soundStatus?.durationMillis &&
+    millisecondsToMinutesAndSeconds(
+      soundStatus?.durationMillis - soundStatus?.positionMillis
+    );
 
   useEffect(() => {
     if (sound) {
@@ -154,8 +188,13 @@ export default function AudioPlayer({
         minimumTrackTintColor={minimumTrackTintColor}
         maximumTrackTintColor={maximumTrackTintColor}
         thumbTintColor={thumbTintColor}
-        onValueChange={onTrackIndicatorChange}
+        onSlidingComplete={onSlidingComplete}
+        onSlidingStart={onSlidingStart}
       />
+      <Text>
+        {" "}
+        {remainTimeInMinutosWithSeconds && remainTimeInMinutosWithSeconds}
+      </Text>
     </View>
   );
 }
